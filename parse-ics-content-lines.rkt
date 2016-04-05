@@ -1,5 +1,9 @@
 #lang racket/base
 
+(provide (struct-out content-line)
+         (struct-out param)
+         parse-content-lines)
+
 (require (rename-in parsack
                     [string parsack-string]))
 (require racket/stream)
@@ -95,8 +99,3 @@
   (parse-result $content-lines in-port))
 
 
-
-(module+ main
-  (for ([l (parse-content-lines (open-input-file "invite.ics"))])
-    (println l)
-    ))
