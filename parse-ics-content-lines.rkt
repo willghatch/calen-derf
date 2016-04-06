@@ -108,7 +108,8 @@
 (define (escape-quote str)
   (string-replace str "\"" "\\\""))
 (define (cline-val-escape str)
-  (escape-newlines (escape-semi (escape-bslash str))))
+  ;; Some things look like I should escape semicolons, other things don't...
+  (escape-newlines (escape-bslash str)))
 (define (param-val-dquote-maybe str)
   (if (or (string-contains? str ";")
           (string-contains? str ":")
