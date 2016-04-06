@@ -2,11 +2,14 @@
 
 (provide (struct-out content-line)
          (struct-out param)
-         parse-content-lines)
+         ics->content-lines
+         content-line->string
+         )
 
 (require (rename-in parsack
                     [string parsack-string]))
 (require racket/stream)
+(require racket/string)
 
 (struct content-line
   (name params value)
@@ -15,14 +18,13 @@
   (name values)
   #:transparent)
 
-(define newline-chars "\r\n")
 (define escape-linebreak-chars " \t")
 (define control-chars ;; all controls except TAB
   (apply string (for/list ([n (append (stream->list (in-range 9))
                                       (stream->list (in-range 10 #x1F))
                                       (list #x7F))])
                   (integer->char n))))
-(define q-unsafe-chars (string-append control-chars "\""))
+(define q-unsafe-chars (string-append control-chars "\"\\"))
 (define unsafe-chars (string-append q-unsafe-chars ";:,"))
 
 (define $escaped-linebreak
@@ -35,37 +37,34 @@
                   (return (filter (λ (v) (not (equal? v 'escaped-linebreak)))
                                   x))))
 
-#;(define $linebreak (<or> (parser-cons $eol
-                                      (notFollowedBy
-                                       (oneOf escape-linebreak-chars)))
-                         $eof))
 (define $linebreak (<or> $eol $eof))
 
 (define (stringify char-parser)
   (parser-compose (cs <- char-parser)
                   (return (apply string cs))))
 
+(define $bslash-char
+  (try (parser-compose (char #\\)
+                       (c <- $anyChar)
+                       (return (case c
+                                 [(#\n) #\newline]
+                                 [else c])))))
+
 (define $safe-char (noneOf unsafe-chars))
 (define $safe-chars (with-ebreaks (many (<or> $safe-char
+                                              $bslash-char
                                               $escaped-linebreak))))
 (define $qsafe-char (noneOf q-unsafe-chars))
 (define $qstring (parser-compose
                   (char #\")
-                  (r <- (many $qsafe-char))
+                  (r <- (many (<or> $qsafe-char $bslash-char)))
                   (char #\")
                   (return r)))
 (define $content-name-chars (with-ebreaks (many (<or> $alphaNum
                                                       (char #\-)
                                                       $escaped-linebreak))))
 (define $content-name-str (stringify $content-name-chars))
-(define $value-char (noneOf "\r\n"))
-
-(define $bslash-char
-  (parser-compose (char #\\)
-                  (c <- (char #\n))
-                  (return (case c
-                            [(#\n) #\newline]
-                            [else c]))))
+(define $value-char (noneOf "\r\n\\"))
 
 (define $value-chars (with-ebreaks (many (<or> $value-char
                                                $escaped-linebreak
@@ -95,7 +94,49 @@
 
 (define $content-lines (many $content-line))
 
-(define (parse-content-lines in-port)
+(define (ics->content-lines in-port)
   (parse-result $content-lines in-port))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; to-string
+
+(define (escape-newlines str)
+  (string-replace str "\n" "\\n"))
+(define (escape-semi str)
+  (string-replace str ";" "\\;"))
+(define (escape-bslash str)
+  (string-replace str "\\" "\\\\"))
+(define (escape-quote str)
+  (string-replace str "\"" "\\\""))
+(define (cline-val-escape str)
+  (escape-newlines (escape-semi (escape-bslash str))))
+(define (param-val-dquote-maybe str)
+  (if (or (string-contains? str ";")
+          (string-contains? str ":")
+          (string-contains? str "\n")
+          (string-contains? str "\"")
+          (string-contains? str ","))
+      (string-append "\""
+                     (escape-newlines (escape-quote (escape-bslash str)))
+                     "\"")
+      str))
+(define (content-line-param-values->string values)
+  (string-join (map param-val-dquote-maybe values) ","))
+(define (content-line-params->string params)
+  (string-join (map (λ (p) (format ";~a=~a"
+                                   (param-name p)
+                                   (content-line-param-values->string
+                                    (param-values p))))
+                    params)
+               ""))
+
+(define (content-line->string cline)
+  #|
+  The spec specifies lines should end in \r\n, but the android
+  calendar program uses just \n and seems to enjoy compatability.  Since
+  I have a vendetta against \r\n newlines, I will use just \n as well.
+  |#
+  (format "~a~a:~a\n"
+          (content-line-name cline)
+          (content-line-params->string (content-line-params cline))
+          (cline-val-escape (content-line-value cline))))
 
