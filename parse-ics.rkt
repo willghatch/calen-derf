@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require "parse-ics-content-lines.rkt")
+(require "content-line.rkt")
 (require racket/list)
 (require racket/string)
 (require racket/match)

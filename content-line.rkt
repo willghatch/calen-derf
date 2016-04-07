@@ -2,7 +2,7 @@
 
 (provide (struct-out content-line)
          (struct-out param)
-         ics->content-lines
+         port->content-lines
          content-line->string
          content-line-get-param-values
          )
@@ -97,7 +97,7 @@
 
 (define $content-lines (many $content-line))
 
-(define (ics->content-lines in-port)
+(define (port->content-lines in-port)
   (parse-result $content-lines in-port))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; to-string
