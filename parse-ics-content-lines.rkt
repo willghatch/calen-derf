@@ -4,6 +4,7 @@
          (struct-out param)
          ics->content-lines
          content-line->string
+         content-line-get-param-values
          )
 
 (require (rename-in parsack
@@ -157,4 +158,13 @@
     (if wrap?
         (ics-line-wrap cline-str)
         cline-str)))
+
+
+(define (content-line-get-param-values cline param-id)
+  ;; returns value list for given parameter name
+  (let* ([params (content-line-params cline)]
+         ;; I think parameters shouldn't be duplicated, but I'm not 100% sure.
+         [right-params (filter (λ (p) (equal? (param-name p) param-id))
+                               params)])
+    (flatten (map param-values right-params))))
 
