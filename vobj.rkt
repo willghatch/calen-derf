@@ -252,6 +252,7 @@
   (let ([str (vobj->string (vjournal-other-parts o))])
     (wrap-with-begin-end-str str "VJOURNAL")))
 
+;; TODO - other vobjects - vtimezone, vfreebusy, vcard
 (struct vunknown
   (tag parts)
   #:transparent)
