@@ -1,27 +1,36 @@
 #lang racket/base
 
 (provide datetime-content-line->date
-         date->datetime-content-line)
+         date->datetime-content-line
+         ical-datetime-str->date
+         )
 
 (require srfi/19)
 (require racket/string)
 (require "content-line.rkt")
 
 (define time-format-str "~Y~m~dT~H~M~S")
-(define (datetime-content-line->date cl)
-  (let* ([str (content-line-value cl)]
-         [first-pass (string->date str time-format-str)]
+
+(define (ical-datetime-str->date str #:tz-name [tz-name #f])
+  (let* ([first-pass (string->date str time-format-str)]
          [zulu-end? (string-suffix? str "Z")]
-         [tz-params (content-line-get-param-values cl "TZID")]
          [tz-name (or (and zulu-end? "UTC")
-                      (and (not (null? tz-params))
-                           (car tz-params))
+                      tz-name
                       "")]
-         ;; TODO - do this better
+         ;; TODO - get the actual offset based on the name
          [tz-offset 0])
     (struct-copy date* first-pass
                  [time-zone-offset #:parent date tz-offset]
                  [time-zone-name tz-name])))
+
+(define (datetime-content-line->date cl)
+  (let* ([str (content-line-value cl)]
+         [tz-params (content-line-get-param-values cl "TZID")]
+         [tz-name (or (and (not (null? tz-params))
+                           (car tz-params))
+                      "")])
+    (ical-datetime-str->date str #:tz-name tz-name)))
+
 (define (date->datetime-content-line d cline-name #:extra-params [extra-params '()])
   (let* ([tz-name (date*-time-zone-name d)]
          [utc? (equal? tz-name "UTC")]
