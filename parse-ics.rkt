@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require "content-line.rkt")
+(require "cl-datetime.rkt")
 (require racket/list)
 (require racket/string)
 (require racket/match)
@@ -20,6 +21,10 @@
   (if (pair? l)
       (car l)
       #f))
+(define (date->cl d name)
+  (if d (date->datetime-content-line d name) #f))
+(define (cl->date cl)
+  (if cl (datetime-content-line->date cl) #f))
 
 (define (filter-pred/left pred l)
   (let ([passes (filter pred l)])
@@ -130,24 +135,6 @@
 
    other-parts)
   #:transparent)
-#;(define (vevent/kw #:start [start #f]
-                   #:end [end #f]
-                   #:summary [summary #f]
-                   #:description [description #f]
-                   #:location [location #f]
-                   #:alarms [alarms #f]
-                   #:timestamp [timestamp #f]
-                   #:created-time [created-time #f]
-                   #:last-modified-time [last-modified-time #f]
-                   #:organizers [organizers #f]
-                   #:attendees [attendees #f]
-                   #:uid [uid #f]
-                   #:sequence [sequence #f]
-                   #:status [status #f]
-                   #:other-clines [other-clines #f]
-                   )
-  (vevent start end summary description location alarms timestamp created-time
-          last-modified-time organizers attendees uid sequence status other-clines))
 
 (define (stuff-vevent parts)
   (let*-values
@@ -172,16 +159,16 @@
        )
     ;; TODO -error checking on fields that should only have 1 element, etc
     (make/kw vevent
-             #:start (car-maybe starts)
-             #:end (car-maybe ends)
+             #:start (cl->date (car-maybe starts))
+             #:end (cl->date (car-maybe ends))
              #:summary (car-maybe summaries)
              #:description (car-maybe descriptions)
              #:location (car-maybe locations)
              #:alarms alarms
 
-             #:timestamp (car-maybe timestamps)
-             #:created-time (car-maybe created-times)
-             #:last-modified-time (car-maybe last-modifieds)
+             #:timestamp (cl->date (car-maybe timestamps))
+             #:created-time (cl->date (car-maybe created-times))
+             #:last-modified-time (cl->date (car-maybe last-modifieds))
 
              #:organizers (car-maybe organizers)
              #:attendees attendees
@@ -211,15 +198,15 @@
               #:other-parts other-parts
               )
      (wrap-with-begin-end-str
-      (string-append (vobj->string start)
-                     (vobj->string end)
+      (string-append (vobj->string (date->cl start "DTSTART"))
+                     (vobj->string (date->cl end "DTEND"))
                      (vobj->string summary)
                      (vobj->string description)
                      (vobj->string location)
                      (vobj->string alarms)
-                     (vobj->string timestamp)
-                     (vobj->string created-time)
-                     (vobj->string last-modified-time)
+                     (vobj->string (date->cl timestamp "DTSTAMP"))
+                     (vobj->string (date->cl created-time "CREATED"))
+                     (vobj->string (date->cl last-modified-time "LAST-MODIFIED"))
                      (vobj->string organizers)
                      (vobj->string attendees)
                      (vobj->string uid)
@@ -295,7 +282,7 @@
   (for ([arg (current-command-line-arguments)])
     (for ([item (treeified-cont-lines->vcal-objects
                  (treeify-content-lines
-                  (ics->content-lines
+                  (port->content-lines
                    (open-input-file arg))))])
       (display (vobj->string item))
       )))
