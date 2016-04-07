@@ -116,22 +116,47 @@
 
 (struct vevent
   (
+   ;; required, only one
+   timestamp
+   uid
+
+   ;; required unless there is a METHOD property, only one
    start
-   end
+
+   ;; optional, only one
+   end ;; alternatively there can be a DURATION rather than DTEND, but only one of the two
    summary
    description
    location
-   alarms
-
-   timestamp
    created-time
    last-modified-time
-
-   organizers
-   attendees
-   uid
+   organizer
    sequence
    status
+   ;; optional, only one, TODO
+   ;class
+   ;geo
+   ;priority
+   ;transp
+   ;url
+   ;recurid
+
+   ;; optional, should not be more than one
+   ;rrule
+
+   ;; optional, multiple times
+   attendees
+   ;attachments
+   ;categories
+   ;comments
+   ;contacts
+   ;exdate
+   ;rstatus
+   ;related
+   ;resources
+   ;rdate
+   ;x-prop
+   alarms
 
    other-parts)
   #:transparent)
@@ -148,7 +173,7 @@
 
        [(uids left) (f "UID" left)]
 
-       [(organizers left) (f "ORGANIZER" left)]
+       [(organizer left) (f "ORGANIZER" left)]
        [(attendees left) (f "ATTENDEE" left)]
        [(summaries left) (f "SUMMARY" left)]
        [(descriptions left) (f "DESCRIPTION" left)]
@@ -170,7 +195,7 @@
              #:created-time (cl->date (car-maybe created-times))
              #:last-modified-time (cl->date (car-maybe last-modifieds))
 
-             #:organizers (car-maybe organizers)
+             #:organizer (car-maybe organizer)
              #:attendees attendees
              #:uid (car-maybe uids)
 
@@ -190,7 +215,7 @@
               #:timestamp timestamp
               #:created-time created-time
               #:last-modified-time last-modified-time
-              #:organizers organizers
+              #:organizer organizer
               #:attendees attendees
               #:uid uid
               #:sequence sequence
@@ -207,7 +232,7 @@
                      (vobj->string (date->cl timestamp "DTSTAMP"))
                      (vobj->string (date->cl created-time "CREATED"))
                      (vobj->string (date->cl last-modified-time "LAST-MODIFIED"))
-                     (vobj->string organizers)
+                     (vobj->string organizer)
                      (vobj->string attendees)
                      (vobj->string uid)
                      (vobj->string sequence)
@@ -217,22 +242,59 @@
       "VEVENT")]))
 
 (struct valarm
-  (trigger description action other-parts)
+  (
+   ;; Once only
+   trigger
+   action ;; AUDIO, EMAIL, or DISPLAY
+   description ;; for display, email
+   summary ;; for email
+   duration ;; time between repeats
+   repeat ;; integer number of repeats
+   attach ;; for audio to play
+
+   ;; multiple
+   attendees
+
+   other-parts)
   #:transparent)
 (define (stuff-valarm parts)
   (let*-values
       ([(fp) filter-pred/left]
        [(fn) filter-name/left]
        [(triggers left) (fn "TRIGGER" parts)]
+       [(actions left) (fn "ACTION" left)]
        [(descriptions left) (fn "DESCRIPTION" left)]
-       [(actions left) (fn "ACTION" left)])
-    (valarm (car-maybe triggers) (car-maybe descriptions) (car-maybe actions) left)))
+       [(summaries left) (fn "SUMMARY" left)]
+       [(repeats left) (fn "REPEAT" left)]
+       [(durations left) (fn "DURATION" left)]
+       [(attaches left) (fn "ATTACH" left)]
+       [(attendees left) (fn "ATTENDEE" left)]
+       )
+    (valarm (car-maybe triggers)
+            (car-maybe actions)
+            (car-maybe descriptions)
+            (car-maybe summaries)
+            (car-maybe durations)
+            (car-maybe repeats)
+            (car-maybe attaches)
+            attendees
+            left)))
 (define (valarm->string o)
-  (let ([desc (vobj->string (valarm-description o))]
+  (let (
         [trigger (vobj->string (valarm-trigger o))]
         [action (vobj->string (valarm-action o))]
-        [misc (vobj->string (valarm-other-parts o))])
-    (wrap-with-begin-end-str (string-append desc trigger action misc) "VALARM")))
+        [desc (vobj->string (valarm-description o))]
+        [summary (vobj->string (valarm-summary o))]
+        [repeat (vobj->string (valarm-repeat o))]
+        [attach (vobj->string (valarm-attach o))]
+        [attendees (vobj->string (valarm-attendees o))]
+        [misc (vobj->string (valarm-other-parts o))]
+        )
+    (wrap-with-begin-end-str (string-append trigger action desc
+                                            summary repeat
+                                            attach attendees
+                                            misc)
+                             "VALARM")))
 
 (struct vtodo
   (other-parts)
