@@ -20,7 +20,7 @@
          ;; TODO - do this better
          [tz-offset 0])
     (struct-copy date* first-pass
-                 ;[timezone-offset #:parent date tz-offset]
+                 [time-zone-offset #:parent date tz-offset]
                  [time-zone-name tz-name])))
 (define (date->datetime-content-line d cline-name #:extra-params [extra-params '()])
   (let* ([tz-name (date*-time-zone-name d)]
