@@ -112,7 +112,10 @@
 (define (escape-quote str)
   (string-replace str "\"" "\\\""))
 (define (cline-val-escape str)
-  ;; Some things look like I should escape semicolons, other things don't...
+  ;; Some ics files I see have semicolon and comma escaped in values,
+  ;; but SOME values need to NOT have them escaped -- eg. RRULE, which
+  ;; has param-like info in the value field.  So I think never escaping
+  ;; them is the right choice.
   (escape-newlines (escape-bslash str)))
 (define (param-val-dquote-maybe str)
   (if (or (string-contains? str ";")
