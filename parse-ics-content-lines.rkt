@@ -135,11 +135,16 @@
 (define (ics-line-wrap str)
   ;; The spec says that implementations SHOULD wrap lines to not be longer
   ;; than 75 characters.
-  (if {(string-length str) . > . 75}
-      (string-append (substring str 0 75)
-                     "\r\n "
-                     (ics-line-wrap (substring str 75)))
-      str))
+  (define line-length 75)
+  (define (inner str len)
+    (if {(string-length str) . > . len}
+        (string-append (substring str 0 len)
+                       "\r\n "
+                       ;; all lines after the first will be prefixed with a space,
+                       ;; so make it one character shorter.
+                       (inner (substring str len) (sub1 line-length)))
+        str))
+  (inner str line-length))
 
 (define (content-line->string cline #:wrap? [wrap? #t])
   ;; The spec specifies specifically the use of \r\n newlines...
