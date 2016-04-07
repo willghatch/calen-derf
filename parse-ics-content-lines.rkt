@@ -57,7 +57,9 @@
 (define $qsafe-char (noneOf q-unsafe-chars))
 (define $qstring (parser-compose
                   (char #\")
-                  (r <- (many (<or> $qsafe-char $bslash-char)))
+                  (r <- (with-ebreaks (many (<or> $qsafe-char
+                                                  $bslash-char
+                                                  $escaped-linebreak))))
                   (char #\")
                   (return r)))
 (define $content-name-chars (with-ebreaks (many (<or> $alphaNum
@@ -130,14 +132,24 @@
                     params)
                ""))
 
-(define (content-line->string cline)
-  #|
-  The spec specifies lines should end in \r\n, but the android
-  calendar program uses just \n and seems to enjoy compatability.  Since
-  I have a vendetta against \r\n newlines, I will use just \n as well.
-  |#
-  (format "~a~a:~a\n"
-          (content-line-name cline)
-          (content-line-params->string (content-line-params cline))
-          (cline-val-escape (content-line-value cline))))
+(define (ics-line-wrap str)
+  ;; The spec says that implementations SHOULD wrap lines to not be longer
+  ;; than 75 characters.
+  (if {(string-length str) . > . 75}
+      (string-append (substring str 0 75)
+                     "\r\n "
+                     (ics-line-wrap (substring str 75)))
+      str))
+
+(define (content-line->string cline #:wrap? [wrap? #t])
+  ;; The spec specifies specifically the use of \r\n newlines...
+  ;; so I guess I will use them, despite the fact that I hate them.
+  (let ([cline-str
+         (format "~a~a:~a\r\n"
+                 (content-line-name cline)
+                 (content-line-params->string (content-line-params cline))
+                 (cline-val-escape (content-line-value cline)))])
+    (if wrap?
+        (ics-line-wrap cline-str)
+        cline-str)))
 
