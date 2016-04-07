@@ -3,6 +3,7 @@
 (provide datetime-content-line->date
          date->datetime-content-line
          ical-datetime-str->date
+         date->ical-datetime-str
          )
 
 (require srfi/19)
@@ -22,6 +23,12 @@
     (struct-copy date* first-pass
                  [time-zone-offset #:parent date tz-offset]
                  [time-zone-name tz-name])))
+(define (date->ical-datetime-str d)
+  (let* ([tz-name (date*-time-zone-name d)]
+         [utc? (equal? tz-name "UTC")]
+         [z-str (if utc? "Z" "")]
+         [datestr (date->string d time-format-str)])
+    (format "~a~a" datestr z-str)))
 
 (define (datetime-content-line->date cl)
   (let* ([str (content-line-value cl)]
@@ -34,14 +41,12 @@
 (define (date->datetime-content-line d cline-name #:extra-params [extra-params '()])
   (let* ([tz-name (date*-time-zone-name d)]
          [utc? (equal? tz-name "UTC")]
-         [z-str (if utc? "Z" "")]
-         [datestr (date->string d time-format-str)]
          [tz-param (cond [utc? #f]
                          [(equal? tz-name "") #f]
                          [else (param "TZID" (list tz-name))])]
          [all-params (if tz-param
                          (cons tz-param extra-params)
                          extra-params)])
-    (content-line cline-name all-params (format "~a~a" datestr z-str))))
+    (content-line cline-name all-params (date->ical-datetime-str d))))
 
 
