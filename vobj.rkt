@@ -6,6 +6,9 @@
 (require racket/string)
 (require racket/match)
 (require kw-make-struct)
+(require syntax/parse/define)
+(require (for-syntax syntax/parse))
+(require (for-syntax racket/base))
 
 ;; note - property parameter values are case insensitive unless they are in quotes,
 ;;        and they should never contain quotes
@@ -77,22 +80,99 @@
 (define (vobj-list->string l)
   (string-join (map vobj->string l) ""))
 
+(struct vobj-part-spec
+  (field-name ;; field name for final hash
+   match-predicate ;; to match content-lines or vobjs
+   transformer ;; transform to any sort of object desired
+   req/opt/list
+   ;; 'required for required specs
+   ;; 'optional if it is optional but only one is allowed
+   ;; 'list if it is repeatable
+   ))
+(define (list-spec? spec)
+  (equal? (vobj-part-spec-req/opt/list spec) 'list))
+(define (req-spec? spec)
+  (equal? (vobj-part-spec-req/opt/list spec) 'required))
+(define (opt-spec? spec)
+  (equal? (vobj-part-spec-req/opt/list spec) 'optional))
+(define (hash-list-cons hash key val)
+  (let ([l (hash-ref hash key)])
+    (hash-set hash key (cons val l))))
+
+(define (build-vobj-hash vobjs specs no-match-tag)
+  (define (matched-spec-process ht spec vobj)
+    (let* ([tag (vobj-part-spec-field-name spec)]
+           [transformer (or (vobj-part-spec-transformer spec) (λ (x) x))]
+           [rol (vobj-part-spec-req/opt/list spec)]
+           [repeatable? (equal? rol 'list)]
+           [taken? (and (not repeatable?) (hash-ref ht tag))])
+      (cond [taken? (eprintf "Warning: non-repeatable field repeated: ~a~n" vobj)]
+            [repeatable? (hash-list-cons ht tag (transformer vobj))]
+            [else (hash-set ht tag (transformer vobj))])))
+
+  (let* ([non-list-part-names (map vobj-part-spec-field-name
+                                   (filter (λ (spec) (or (req-spec? spec)
+                                                         (opt-spec? spec)))
+                                           specs))]
+         [list-part-names (map vobj-part-spec-field-name (filter list-spec? specs))]
+         [hash1 (apply hash (apply append (map (λ (name) (list name '()))
+                                               (cons no-match-tag list-part-names))))]
+         [hash2 (foldl (λ (name hash-so-far) (hash-set hash-so-far name #f))
+                       hash1
+                       non-list-part-names)]
+         [pre-reversed
+          (for/fold ([ht hash2])
+                    ([vobj vobjs])
+            (let ([spec (for/or ([spec specs])
+                          (let* ([pre-pred (vobj-part-spec-match-predicate spec)]
+                                 [pred (if (string? pre-pred)
+                                           (cline-name-matcher pre-pred)
+                                           pre-pred)])
+                            (if (pred vobj)
+                                spec
+                                #f)))])
+              (if spec
+                  (matched-spec-process ht spec vobj)
+                  (hash-list-cons ht no-match-tag vobj))))])
+    (for/fold ([ht pre-reversed])
+              ([name list-part-names])
+      (hash-set ht name (reverse (hash-ref ht name))))))
+
+(define-syntax-parser mk-stuffer
+  [(mk-stuffer struct-id:id
+               ([part-name:keyword pred transformer rol] ...)
+               rest-name:keyword)
+   #`(λ (parts)
+       (let ([part-hash
+              (build-vobj-hash
+               parts
+               (list (vobj-part-spec (quote part-name) pred transformer rol) ...)
+               (quote rest-name))])
+         (flatten-syntax-after-4
+          (make/kw struct-id
+                   rest-name (hash-ref part-hash (quote rest-name))
+                   (part-name (hash-ref part-hash (quote part-name))) ...
+                   ))))])
+(define-syntax-parser flatten-syntax-after-4
+  ;; TODO - There has to be a better way to do this...
+  [(fsa4 (mk/kw s-id r-n r-n-ref part-pair ...))
+   (let* ([pairs (map syntax->list (syntax->list #'(part-pair ...)))]
+          [pairs-appended (apply append pairs)])
+     #`(mk/kw s-id r-n r-n-ref #,@pairs-appended))])
+
 (struct vcalendar
   (prod-id version method events todos journals other-parts)
   #:transparent)
-(define (stuff-vcalendar parts)
-  (let*-values
-      ([(fp) filter-pred/left]
-       [(fn) filter-name/left]
-       [(left) parts]
-       [(prod-ids left) (fn "PRODID" left)]
-       [(versions left) (fn "VERSION" left)]
-       [(methods left) (fn "METHOD" left)]
-       [(events left) (fp vevent? left)]
-       [(todos left) (fp vtodo? left)]
-       [(journals left) (fp vjournal? left)])
-    (vcalendar (car-maybe prod-ids) (car-maybe versions) (car-maybe methods)
-               events todos journals left)))
+(define stuff-vcalendar
+  (mk-stuffer vcalendar
+              ([#:prod-id "PRODID" #f 'required]
+               [#:version "VERSION" #f 'required]
+               [#:method "METHOD" #f 'optional]
+               [#:events vevent? #f 'list]
+               [#:todos vtodo? #f 'list]
+               [#:journals vjournal? #f 'list]
+               )
+              #:other-parts))
 (define (vcalendar->string o)
   (match o
     [(make/kw vcalendar
@@ -161,48 +241,27 @@
    other-parts)
   #:transparent)
 
-(define (stuff-vevent parts)
-  (let*-values
-      ([(f) filter-name/left]
-       [(p) filter-pred/left]
-       [(starts left) (f "DTSTART" parts)]
-       [(ends left) (f "DTEND" left)]
-       [(timestamps left) (f "DTSTAMP" left)]
-       [(last-modifieds left) (f "LAST-MODIFIED" left)]
-       [(created-times left) (f "CREATED" left)]
+(define stuff-vevent
+  (mk-stuffer vevent
+              ([#:timestamp "DTSTAMP" cl->date 'required]
+               [#:uid "UID" #f 'required]
 
-       [(uids left) (f "UID" left)]
+               [#:start "DTSTART" cl->date 'optional]
+               [#:end "DTEND" cl->date 'optional]
 
-       [(organizer left) (f "ORGANIZER" left)]
-       [(attendees left) (f "ATTENDEE" left)]
-       [(summaries left) (f "SUMMARY" left)]
-       [(descriptions left) (f "DESCRIPTION" left)]
-       [(locations left) (f "LOCATION" left)]
-       [(sequence-nums left) (f "SEQUENCE" left)]
-       [(statuses left) (f "STATUS" left)]
-       [(alarms left) (p valarm? left)]
-       )
-    ;; TODO -error checking on fields that should only have 1 element, etc
-    (make/kw vevent
-             #:start (cl->date (car-maybe starts))
-             #:end (cl->date (car-maybe ends))
-             #:summary (car-maybe summaries)
-             #:description (car-maybe descriptions)
-             #:location (car-maybe locations)
-             #:alarms alarms
+               [#:summary "SUMMARY" #f 'optional]
+               [#:description "DESCRIPTION" #f 'optional]
+               [#:location "LOCATION" #f 'optional]
+               [#:created-time "CREATED" cl->date 'optional]
+               [#:last-modified-time "LAST-MODIFIED" cl->date 'optional]
+               [#:organizer "ORGANIZER" #f 'optional]
+               [#:sequence "SEQUENCE" #f 'optional]
+               [#:status "STATUS" #f 'optional]
 
-             #:timestamp (cl->date (car-maybe timestamps))
-             #:created-time (cl->date (car-maybe created-times))
-             #:last-modified-time (cl->date (car-maybe last-modifieds))
-
-             #:organizer (car-maybe organizer)
-             #:attendees attendees
-             #:uid (car-maybe uids)
-
-             #:sequence (car-maybe sequence-nums)
-             #:status (car-maybe statuses)
-             #:other-parts left
-             )))
+               [#:attendees "ATTENDEE" #f 'list]
+               [#:alarms valarm? #f 'list]
+               )
+              #:other-parts))
 (define (vevent->string o)
   (match o
     [(make/kw vevent
@@ -257,28 +316,18 @@
 
    other-parts)
   #:transparent)
-(define (stuff-valarm parts)
-  (let*-values
-      ([(fp) filter-pred/left]
-       [(fn) filter-name/left]
-       [(triggers left) (fn "TRIGGER" parts)]
-       [(actions left) (fn "ACTION" left)]
-       [(descriptions left) (fn "DESCRIPTION" left)]
-       [(summaries left) (fn "SUMMARY" left)]
-       [(repeats left) (fn "REPEAT" left)]
-       [(durations left) (fn "DURATION" left)]
-       [(attaches left) (fn "ATTACH" left)]
-       [(attendees left) (fn "ATTENDEE" left)]
-       )
-    (valarm (car-maybe triggers)
-            (car-maybe actions)
-            (car-maybe descriptions)
-            (car-maybe summaries)
-            (car-maybe durations)
-            (car-maybe repeats)
-            (car-maybe attaches)
-            attendees
-            left)))
+(define stuff-valarm
+  (mk-stuffer valarm
+              ([#:trigger "TRIGGER" #f 'required]
+               [#:action "ACTION" #f 'required]
+               [#:description "DESCRIPTION" #f 'optional]
+               [#:summary "SUMMARY" #f 'optional]
+               [#:duration "DURATION" #f 'optional]
+               [#:repeat "REPEAT" #f 'optional]
+               [#:attach "ATTACH" #f 'optional]
+               [#:attendees "ATTENDEE" #f 'list]
+               )
+              #:other-parts))
 (define (valarm->string o)
   (let (
         [trigger (vobj->string (valarm-trigger o))]
@@ -323,7 +372,6 @@
 (define (vunknown->string o)
   (let ([str (vobj->string (vunknown-parts o))])
     (wrap-with-begin-end-str str (vunknown-tag o))))
-
 
 (define (treeified-cont-lines->vcal-objects tree)
   ;; this tree always is a list at the top level, probably of one item
