@@ -1,11 +1,13 @@
 #lang racket/base
 
-(provide (struct-out content-line)
-         (struct-out param)
-         port->content-lines
-         content-line->string
-         content-line-get-param-values
-         )
+(provide
+ (struct-out content-line)
+ (struct-out param)
+ port->content-lines
+ content-line->string
+ content-line-get-param-values
+ $param-list
+ )
 
 (require (rename-in parsack
                     [string parsack-string]))
@@ -14,9 +16,11 @@
 (require racket/list)
 
 (struct content-line
+  ;; string, list of params, string
   (name params value)
   #:transparent)
 (struct param
+  ;; string, list of strings
   (name values)
   #:transparent)
 
@@ -84,13 +88,14 @@
                                (char #\=)
                                (vals <- $param-values)
                                (return (param name vals))))
+(define $param-list (sepBy $param (char #\;)))
 (define $param/semicoloned (parser-compose (char #\;)
-                                           (p <- $param)
-                                           (return p)))
+                                           (plist <- $param-list)
+                                           (return plist)))
 
 (define $content-line
   (parser-compose (name <- $content-name-str)
-                  (params <- (many $param/semicoloned))
+                  (params <- (<or> $param/semicoloned (return '())))
                   (char #\:)
                   (val <- $value-str)
                   $linebreak
