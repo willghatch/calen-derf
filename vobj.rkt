@@ -14,8 +14,6 @@
 ;;        and they should never contain quotes
 
 
-;; TODO - make cline->string, v<whatever>->string, line-limit xformer to round-trip back to ics
-
 (define (cline-name-matcher name)
   (λ (cline) (and (content-line? cline)
                   (equal? (content-line-name cline)
