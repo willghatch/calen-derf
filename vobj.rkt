@@ -8,6 +8,7 @@
 (require kw-make-struct)
 (require syntax/parse/define)
 (require (for-syntax syntax/parse))
+(require (for-syntax racket/syntax))
 (require (for-syntax racket/base))
 
 ;; note - property parameter values are case insensitive unless they are in quotes,
@@ -24,6 +25,8 @@
       #f))
 (define (date->cl d name)
   (if d (date->datetime-content-line d name) #f))
+(define (date->cl/curry name)
+  (λ (d) (date->cl d name)))
 (define (cl->date cl)
   (if cl (datetime-content-line->date cl) #f))
 
@@ -136,81 +139,85 @@
               ([name list-part-names])
       (hash-set ht name (reverse (hash-ref ht name))))))
 
-(define-syntax-parser mk-stuffer
-  [(mk-stuffer struct-id:id
-               ([part-name:keyword pred transformer rol] ...)
-               rest-name:keyword)
-   #`(λ (parts)
-       (let ([part-hash
-              (build-vobj-hash
-               parts
-               (list (vobj-part-spec (quote part-name) pred transformer rol) ...)
-               (quote rest-name))])
-         (flatten-syntax-after-4
-          (make/kw struct-id
-                   rest-name (hash-ref part-hash (quote rest-name))
-                   (part-name (hash-ref part-hash (quote part-name))) ...
-                   ))))])
-(define-syntax-parser flatten-syntax-after-4
-  ;; TODO - There has to be a better way to do this...
-  [(fsa4 (mk/kw s-id r-n r-n-ref part-pair ...))
-   (let* ([pairs (map syntax->list (syntax->list #'(part-pair ...)))]
-          [pairs-appended (apply append pairs)])
-     #`(mk/kw s-id r-n r-n-ref #,@pairs-appended))])
 
-(struct vcalendar
-  (prod-id version method events todos journals other-parts)
-  #:transparent)
-(define stuff-vcalendar
-  (mk-stuffer vcalendar
-              ([#:prod-id "PRODID" #f 'required]
-               [#:version "VERSION" #f 'required]
-               [#:method "METHOD" #f 'optional]
-               [#:events vevent? #f 'list]
-               [#:todos vtodo? #f 'list]
-               [#:journals vjournal? #f 'list]
-               )
-              #:other-parts))
-(define (vcalendar->string o)
-  (match o
-    [(make/kw vcalendar
-              #:prod-id prod-id
-              #:version version
-              #:method method
-              #:events events
-              #:todos todos
-              #:journals journals
-              #:other-parts other-parts)
-     (wrap-with-begin-end-str
-      (string-append (vobj->string prod-id)
-                     (vobj->string version)
-                     (vobj->string method)
-                     (vobj->string events)
-                     (vobj->string todos)
-                     (vobj->string journals)
-                     (vobj->string other-parts)
-                     )
-      "VCALENDAR")]))
+(define-syntax-parser def-vobj
+  [(def-vobj vobj-name:id
+     begin/end-tag-string:str
+     ([part-name:id matcher cline-> ->cline req/opt-spec] ...)
+     extras-name:id)
+   (with-syntax ([stuffer-name (format-id #'vobj-name "stuff-~a" #'vobj-name)]
+                 [to-clines-name (format-id #'vobj-name "~a->content-lines" #'vobj-name)]
+                 [to-string-name (format-id #'vobj-name "~a->string" #'vobj-name)]
+                 [(accessor ...)
+                  (datum->syntax
+                   #'vobj-name
+                   (map (λ (n) (format-id #'vobj-name "~a-~a" #'vobj-name n))
+                        (syntax->list #'(part-name ...))))]
+                 [extras-accessor (format-id #'vobj-name "~a-~a" #'vobj-name #'extras-name)])
+     #`(begin
+         (struct vobj-name (extras-name part-name ...) #:transparent)
+         (define (stuffer-name parts)
+           (let ([part-hash
+                  (build-vobj-hash
+                   parts
+                   (list (vobj-part-spec (quote part-name)
+                                         matcher cline->
+                                         req/opt-spec)
+                         ...)
+                   (quote extras-name))])
+             (vobj-name (hash-ref part-hash (quote extras-name))
+                        (hash-ref part-hash (quote part-name)) ...)))
+         (define (to-clines-name o)
+           (flatten
+            (list (content-line "BEGIN" '() begin/end-tag-string)
+                  (let* ([xf (or ->cline (λ (x) x))])
+                    (if (equal? req/opt-spec 'list)
+                        (map xf (accessor o))
+                        (xf (accessor o))))
+                  ...
+                  ;;((or ->cline (λ (x) x)) (accessor o)) ...
+                  (extras-accessor o)
+                  (content-line "END" '() begin/end-tag-string))))
+         (define (to-string-name o)
+           (string-join (map vobj->string (to-clines-name o)) ""))
+         ;; END def-vobj
+         ))])
 
-(struct vevent
+(def-vobj vcalendar
+  ;; field, matcher/pred, xf-in, xf-out, ropt-spec
+  "VCALENDAR"
+  ([prod-id "PRODID" #f #f 'required]
+   [version "VERSION" #f #f 'required]
+   [method "METHOD" #f #f 'optional]
+   [events vevent? #f vevent->content-lines 'list]
+   [todos vtodo? #f vtodo->content-lines 'list]
+   [journals vjournal? #f vjournal->content-lines 'list])
+  extras)
+
+(def-vobj vevent
+  ;; field, matcher/pred, xf-in, xf-out, ropt-spec
+  "VEVENT"
   (
    ;; required, only one
-   timestamp
-   uid
+   [timestamp "DTSTAMP" cl->date (date->cl/curry "DTSTAMP") 'required]
+   [uid "UID" #f #f 'required]
 
    ;; required unless there is a METHOD property, only one
-   start
+   [start "DTSTART" cl->date (date->cl/curry "DTSTART") 'optional]
 
    ;; optional, only one
-   end ;; alternatively there can be a DURATION rather than DTEND, but only one of the two
-   summary
-   description
-   location
-   created-time
-   last-modified-time
-   organizer
-   sequence
-   status
+   ;; alternatively there can be a DURATION rather than DTEND, but only one of the two
+   [end "DTEND" cl->date (date->cl/curry "DTEND") 'optional]
+
+   [summary "SUMMARY" #f #f 'optional]
+   [description "DESCRIPTION" #f #f 'optional]
+   [location "LOCATION" #f #f 'optional]
+   [created-time "CREATED" cl->date (date->cl/curry "CREATED") 'optional]
+   [last-modified-time "LAST-MODIFIED" cl->date (date->cl/curry "LAST-MODIFIED") 'optional]
+   [organizer "ORGANIZER" #f #f 'optional]
+   [sequence "SEQUENCE" #f #f 'optional]
+   [status "STATUS" #f #f 'optional]
+
    ;; optional, only one, TODO
    ;class
    ;geo
@@ -219,11 +226,11 @@
    ;url
    ;recurid
 
-   ;; optional, should not be more than one
+   ;; optional, SHOULD not be more than one
    ;rrule
 
    ;; optional, multiple times
-   attendees
+   [attendees "ATTENDEE" #f #f 'list]
    ;attachments
    ;categories
    ;comments
@@ -233,133 +240,34 @@
    ;related
    ;resources
    ;rdate
-   ;x-prop
-   alarms
+   [alarms valarm? #f valarm->content-lines 'list])
+  extras)
 
-   other-parts)
-  #:transparent)
+(def-vobj valarm
+  ;; field, matcher/pred, xf-in, xf-out, ropt-spec
+  "VALARM"
+  ([trigger "TRIGGER" #f #f 'required]
+   [action "ACTION" #f #f 'required]
+   [description "DESCRIPTION" #f #f 'optional]
+   [summary "SUMMARY" #f #f 'optional]
+   [duration "DURATION" #f #f 'optional]
+   [repeat "REPEAT" #f #f 'optional]
+   [attach "ATTACH" #f #f 'optional]
+   [attendees "ATTENDEE" #f #f 'list]
+   )
+  extras)
 
-(define stuff-vevent
-  (mk-stuffer vevent
-              ([#:timestamp "DTSTAMP" cl->date 'required]
-               [#:uid "UID" #f 'required]
+(def-vobj vtodo
+  ;; field, matcher/pred, xf-in, xf-out, ropt-spec
+  "VTODO"
+  ()
+  extras)
 
-               [#:start "DTSTART" cl->date 'optional]
-               [#:end "DTEND" cl->date 'optional]
-
-               [#:summary "SUMMARY" #f 'optional]
-               [#:description "DESCRIPTION" #f 'optional]
-               [#:location "LOCATION" #f 'optional]
-               [#:created-time "CREATED" cl->date 'optional]
-               [#:last-modified-time "LAST-MODIFIED" cl->date 'optional]
-               [#:organizer "ORGANIZER" #f 'optional]
-               [#:sequence "SEQUENCE" #f 'optional]
-               [#:status "STATUS" #f 'optional]
-
-               [#:attendees "ATTENDEE" #f 'list]
-               [#:alarms valarm? #f 'list]
-               )
-              #:other-parts))
-(define (vevent->string o)
-  (match o
-    [(make/kw vevent
-              #:start start
-              #:end end
-              #:summary summary
-              #:description description
-              #:location location
-              #:alarms alarms
-              #:timestamp timestamp
-              #:created-time created-time
-              #:last-modified-time last-modified-time
-              #:organizer organizer
-              #:attendees attendees
-              #:uid uid
-              #:sequence sequence
-              #:status status
-              #:other-parts other-parts
-              )
-     (wrap-with-begin-end-str
-      (string-append (vobj->string (date->cl start "DTSTART"))
-                     (vobj->string (date->cl end "DTEND"))
-                     (vobj->string summary)
-                     (vobj->string description)
-                     (vobj->string location)
-                     (vobj->string alarms)
-                     (vobj->string (date->cl timestamp "DTSTAMP"))
-                     (vobj->string (date->cl created-time "CREATED"))
-                     (vobj->string (date->cl last-modified-time "LAST-MODIFIED"))
-                     (vobj->string organizer)
-                     (vobj->string attendees)
-                     (vobj->string uid)
-                     (vobj->string sequence)
-                     (vobj->string status)
-                     (vobj->string other-parts)
-                     )
-      "VEVENT")]))
-
-(struct valarm
-  (
-   ;; Once only
-   trigger
-   action ;; AUDIO, EMAIL, or DISPLAY
-   description ;; for display, email
-   summary ;; for email
-   duration ;; time between repeats
-   repeat ;; integer number of repeats
-   attach ;; for audio to play
-
-   ;; multiple
-   attendees
-
-   other-parts)
-  #:transparent)
-(define stuff-valarm
-  (mk-stuffer valarm
-              ([#:trigger "TRIGGER" #f 'required]
-               [#:action "ACTION" #f 'required]
-               [#:description "DESCRIPTION" #f 'optional]
-               [#:summary "SUMMARY" #f 'optional]
-               [#:duration "DURATION" #f 'optional]
-               [#:repeat "REPEAT" #f 'optional]
-               [#:attach "ATTACH" #f 'optional]
-               [#:attendees "ATTENDEE" #f 'list]
-               )
-              #:other-parts))
-(define (valarm->string o)
-  (let (
-        [trigger (vobj->string (valarm-trigger o))]
-        [action (vobj->string (valarm-action o))]
-        [desc (vobj->string (valarm-description o))]
-        [summary (vobj->string (valarm-summary o))]
-        [repeat (vobj->string (valarm-repeat o))]
-        [attach (vobj->string (valarm-attach o))]
-        [attendees (vobj->string (valarm-attendees o))]
-        [misc (vobj->string (valarm-other-parts o))]
-        )
-    (wrap-with-begin-end-str (string-append trigger action desc
-                                            summary repeat
-                                            attach attendees
-                                            misc)
-                             "VALARM")))
-
-(struct vtodo
-  (other-parts)
-  #:transparent)
-(define (stuff-vtodo parts)
-  (vtodo parts))
-(define (vtodo->string o)
-  (let ([str (vobj->string (vtodo-other-parts o))])
-    (wrap-with-begin-end-str str "VTODO")))
-
-(struct vjournal
-  (other-parts)
-  #:transparent)
-(define (stuff-vjournal parts)
-  vjournal parts)
-(define (vjournal->string o)
-  (let ([str (vobj->string (vjournal-other-parts o))])
-    (wrap-with-begin-end-str str "VJOURNAL")))
+(def-vobj vjournal
+  ;; field, matcher/pred, xf-in, xf-out, ropt-spec
+  "VJOURNAL"
+  ()
+  extras)
 
 ;; TODO - other vobjects - vtimezone, vfreebusy, vcard
 (struct vunknown
