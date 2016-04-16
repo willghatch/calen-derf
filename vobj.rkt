@@ -269,14 +269,36 @@
   ()
   extras)
 
-;; TODO - other vobjects - vtimezone, vfreebusy, vcard
+(def-vobj vtimezone
+  "VTIMEZONE"
+  ()
+  extras)
+(def-vobj v-tz-standard
+  "STANDARD"
+  ()
+  extras)
+(def-vobj v-tz-daylight
+  "DAYLIGHT"
+  ()
+  extras)
+(def-vobj vfreebusy
+  "VFREEBUSY"
+  ()
+  extras)
+
+(def-vobj vcard
+  "VCARD"
+  ()
+  extras)
+
+
 (struct vunknown
-  (tag parts)
+  (extras tag)
   #:transparent)
 (define (stuff-vunknown tag parts)
-  (vunknown tag parts))
+  (vunknown parts tag))
 (define (vunknown->string o)
-  (let ([str (vobj->string (vunknown-parts o))])
+  (let ([str (vobj->string (vunknown-extras o))])
     (wrap-with-begin-end-str str (vunknown-tag o))))
 
 (define (treeified-cont-lines->vcal-objects tree)
