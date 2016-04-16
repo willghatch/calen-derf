@@ -14,6 +14,9 @@
 ;; note - property parameter values are case insensitive unless they are in quotes,
 ;;        and they should never contain quotes
 
+;; TODO - when I transform content-lines into better things (eg date structs) I need
+;;        preserve param data.
+
 
 (define (cline-name-matcher name)
   (λ (cline) (and (content-line? cline)
@@ -288,7 +291,70 @@
 
 (def-vobj vcard
   "VCARD"
-  ()
+  (
+   ;; version must come immediately after the BEGIN line
+   [version "VERSION" #f #f 'required]
+   [prodid "PRODID" #f #f 'optional]
+   [revision "REV" cl->date (date->cl/curry "REV") 'optional]
+   [uid "UID" #f #f 'optional]
+   [formatted-names "FN" #f #f 'list] ;; at least one is required...
+   [structured-name "N" #f #f 'optional]
+   #|
+   Structured name is famly-names;given-names;additional-names;honorific-prefixes;honorific-suffixes
+   If you have multiple of one type of name, they are comma separated.
+   |#
+   [nicknames "NICKNAME" #f #f 'list]
+   [photos "PHOTO" #f #f 'list]
+   [birthday "BDAY" #f #f 'optional]
+   [anniversary "ANNIVERSARY" #f #f 'optional]
+   [gender "GENDER" #f #f 'optional]
+   [addresses "ADR" #f #f 'list]
+   #|
+   address components are semicolon separated and have to be in the right order (with blanks)
+   the post office box;
+   the extended address (e.g., apartment or suite number);
+   the street address;
+   the locality (e.g., city);
+   the region (e.g., state or province);
+   the postal code;
+   the country name
+
+   It is recommended to leave the first two blank.
+
+   Here's an example with properties: ADR;GEO="geo:12.3457,78.910";LABEL="Mr. John Q. Public, Esq.\n
+   Mail Drop: TNE QB\n123 Main Street\nAny Town, CA  91921-1234\n
+   U.S.A.":;;123 Main Street;Any Town;CA;91921-1234;U.S.A.
+   |#
+   [telephones "TEL" #f #f 'list]
+   [emails "EMAIL" #f #f 'list]
+   [messaging-addresses "IMPP" #f #f 'list]
+   [uris "URL" #f #f 'list]
+   [pubkeys "KEY" #f #f 'list]
+   [languages "LANG" #f #f 'list]
+   [free-busy-uris "FBURL" #f #f 'list] ;; URLs to free-busy calendar
+   [calendar-uris "CALURI" #f #f 'list] ;; URLs to calendar
+   [calendar-request-uris "CALADRURI" #f #f 'list] ;; URLs (email addrs) for requesting appointments
+   [time-zones "TZ" #f #f 'list]
+   [geocoordinates "GEO" #f #f 'list] ;;  eg. GEO:geo:37.00,-122.00
+   [titles "TITLE" #f #f 'list]
+   [roles "ROLE" #f #f 'list]
+   [relations "RELATED" #f #f 'list]
+   #|
+   eg.
+   RELATED;TYPE=friend:urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6
+   RELATED;TYPE=contact:http://example.com/directory/jdoe.vcf
+   RELATED;TYPE=co-worker;VALUE=text:Please contact my assistant Jane
+   Doe for any inquiries.
+   |#
+   [categories "CATEGORIES" #f #f 'list]
+   #|
+   tags for filtering, essentially.  This will be a list of lists in the end.
+   eg.
+   CATEGORIES:TRAVEL AGENT
+   CATEGORIES:INTERNET,IETF,INDUSTRY,INFORMATION TECHNOLOGY
+   |#
+
+   )
   extras)
 
 
