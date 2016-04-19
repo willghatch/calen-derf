@@ -4,9 +4,10 @@
  (struct-out content-line)
  (struct-out param)
  (struct-out eparams)
- (ep-val)
+ ep-val
  port->content-lines
  content-line->string
+ content-line->eparams-string
  content-line-get-param-values
  content-line-filter-out-params
  ->content-line
@@ -54,7 +55,7 @@
     [else (let-values ([(params str-val) (transform value)])
             (content-line tag params str-val))]))
 
-(define (content-line->eparam-string cl)
+(define (content-line->eparams-string cl)
   (if (not (content-line? cl))
       #f
       (eparams (content-line-params cl)

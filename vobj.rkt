@@ -15,6 +15,9 @@
 (provide
  port->vobjects
  vobj->string
+ generate-uid
+ calen-derf-prod-id
+ vcalendar-version-string
  ;; also provided are vobjects and their /default constructors
  (all-from-out "content-line.rkt")
  )
@@ -22,6 +25,23 @@
 ;; note - property parameter values are case insensitive unless they are in quotes,
 ;;        and they should never contain quotes
 
+(define calen-derf-prod-id "-//calen-derf//calen-derf v0//EN")
+(define vcalendar-version-string "2.0")
+
+(define (left-pad desired-length pad-char str)
+  ;; Did somebody say "killer micro-library"?
+  (let* ([len (string-length str)]
+         [padding (make-string (- desired-length len) pad-char)])
+    (string-append padding str)))
+
+(define (generate-uid)
+  (define (gen-4)
+    (left-pad 4 #\0 (number->string (random 1 #xffff) 16)))
+  (string-append "CD-"
+                 (number->string (current-seconds) 16)
+                 "-"
+                 (gen-4)
+                 (gen-4)))
 
 (define (cline-name-matcher name)
   (λ (cline) (and (content-line? cline)
