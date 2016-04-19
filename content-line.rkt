@@ -3,9 +3,11 @@
 (provide
  (struct-out content-line)
  (struct-out param)
+ (struct-out eparams)
  port->content-lines
  content-line->string
  content-line-get-param-values
+ content-line-filter-out-params
  $param-list
  )
 
@@ -22,6 +24,14 @@
 (struct param
   ;; string, list of strings
   (name values)
+  #:transparent)
+
+(struct eparams
+  ;; eparams is a wrapper for transformed content lines.
+  ;; My idea is that I should always be able to parse the whole value
+  ;; into some better object, but there may always be extra parameters
+  ;; that I've ignored.  So this will store them.
+  (params value)
   #:transparent)
 
 (define escape-linebreak-chars " \t")
@@ -176,4 +186,9 @@
          [right-params (filter (λ (p) (equal? (param-name p) param-id))
                                params)])
     (flatten (map param-values right-params))))
+
+(define (content-line-filter-out-params cline exclude-param-id)
+  (let* ([params (content-line-params cline)])
+    (filter (λ (p) (not (equal? (param-name p) exclude-param-id)))
+            params)))
 

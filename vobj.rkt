@@ -14,9 +14,6 @@
 ;; note - property parameter values are case insensitive unless they are in quotes,
 ;;        and they should never contain quotes
 
-;; TODO - when I transform content-lines into better things (eg date structs) I need
-;;        preserve param data.
-
 
 (define (cline-name-matcher name)
   (λ (cline) (and (content-line? cline)
@@ -26,12 +23,12 @@
   (if (pair? l)
       (car l)
       #f))
-(define (date->cl d name)
-  (if d (date->datetime-content-line d name) #f))
-(define (date->cl/curry name)
-  (λ (d) (date->cl d name)))
-(define (cl->date cl)
-  (if cl (datetime-content-line->date cl) #f))
+(define (p-date->cl d name)
+  (if d (p-date->datetime-content-line d name) #f))
+(define (p-date->cl/curry name)
+  (λ (d) (p-date->cl d name)))
+(define (cl->p-date cl)
+  (if cl (datetime-content-line->p-date cl) #f))
 
 (define (filter-pred/left pred l)
   (let ([passes (filter pred l)])
@@ -202,21 +199,21 @@
   "VEVENT"
   (
    ;; required, only one
-   [timestamp "DTSTAMP" cl->date (date->cl/curry "DTSTAMP") 'required]
+   [timestamp "DTSTAMP" cl->p-date (p-date->cl/curry "DTSTAMP") 'required]
    [uid "UID" #f #f 'required]
 
    ;; required unless there is a METHOD property, only one
-   [start "DTSTART" cl->date (date->cl/curry "DTSTART") 'optional]
+   [start "DTSTART" cl->p-date (p-date->cl/curry "DTSTART") 'optional]
 
    ;; optional, only one
    ;; alternatively there can be a DURATION rather than DTEND, but only one of the two
-   [end "DTEND" cl->date (date->cl/curry "DTEND") 'optional]
+   [end "DTEND" cl->p-date (p-date->cl/curry "DTEND") 'optional]
 
    [summary "SUMMARY" #f #f 'optional]
    [description "DESCRIPTION" #f #f 'optional]
    [location "LOCATION" #f #f 'optional]
-   [created-time "CREATED" cl->date (date->cl/curry "CREATED") 'optional]
-   [last-modified-time "LAST-MODIFIED" cl->date (date->cl/curry "LAST-MODIFIED") 'optional]
+   [created-time "CREATED" cl->p-date (p-date->cl/curry "CREATED") 'optional]
+   [last-modified-time "LAST-MODIFIED" cl->p-date (p-date->cl/curry "LAST-MODIFIED") 'optional]
    [organizer "ORGANIZER" #f #f 'optional]
    [sequence "SEQUENCE" #f #f 'optional]
    [status "STATUS" #f #f 'optional]
@@ -295,7 +292,7 @@
    ;; version must come immediately after the BEGIN line
    [version "VERSION" #f #f 'required]
    [prodid "PRODID" #f #f 'optional]
-   [revision "REV" cl->date (date->cl/curry "REV") 'optional]
+   [revision "REV" cl->p-date (p-date->cl/curry "REV") 'optional]
    [uid "UID" #f #f 'optional]
    [formatted-names "FN" #f #f 'list] ;; at least one is required...
    [structured-name "N" #f #f 'optional]
