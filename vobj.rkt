@@ -139,21 +139,54 @@
               ([name list-part-names])
       (hash-set ht name (reverse (hash-ref ht name))))))
 
+(define-for-syntax (alternate-lists a b)
+  (if (null? a)
+      null
+      (cons (car a) (cons (car b) (alternate-lists (cdr a) (cdr b))))))
 
 (define-syntax-parser def-vobj
   [(def-vobj vobj-name:id
      begin/end-tag-string:str
      ([part-name:id matcher cline-> ->cline req/opt-spec] ...)
      extras-name:id)
-   (with-syntax ([stuffer-name (format-id #'vobj-name "stuff-~a" #'vobj-name)]
-                 [to-clines-name (format-id #'vobj-name "~a->content-lines" #'vobj-name)]
-                 [to-string-name (format-id #'vobj-name "~a->string" #'vobj-name)]
-                 [(accessor ...)
-                  (datum->syntax
-                   #'vobj-name
-                   (map (λ (n) (format-id #'vobj-name "~a-~a" #'vobj-name n))
-                        (syntax->list #'(part-name ...))))]
-                 [extras-accessor (format-id #'vobj-name "~a-~a" #'vobj-name #'extras-name)])
+   (with-syntax*
+     ([stuffer-name (format-id #'vobj-name "stuff-~a" #'vobj-name)]
+      [to-clines-name (format-id #'vobj-name "~a->content-lines" #'vobj-name)]
+      [to-string-name (format-id #'vobj-name "~a->string" #'vobj-name)]
+      [(accessor ...)
+       (datum->syntax
+        #'vobj-name
+        (map (λ (n) (format-id #'vobj-name "~a-~a" #'vobj-name n))
+             (syntax->list #'(part-name ...))))]
+      [extras-accessor (format-id #'vobj-name "~a-~a" #'vobj-name #'extras-name)]
+      [make-default-name (format-id #'vobj-name "~a/default" #'vobj-name)]
+      [(make-default-arg-kw ...)
+       (datum->syntax #'vobj-name
+                      (map (λ (x) (string->keyword (symbol->string x)))
+                           (syntax->datum #'(part-name ...))))]
+      [(make-default-arg-name ...)
+       (datum->syntax #'vobj-name (map (λ (n) (format-id #'vobj-name "~a-expr" n))
+                                       (syntax->list #'(part-name ...))))]
+      [(make-default-arg-form ...)
+       (datum->syntax #'vobj-name
+                      (map (λ (n ro-spec)
+                             (let* ([ro-spec-sym (syntax->datum ro-spec)]
+                                    [default-arg
+                                      (case ro-spec-sym
+                                        [('required) n]
+                                        [('optional) `[,n #f]]
+                                        [('list) `[,n '()]])])
+                               (datum->syntax #'vobj-name default-arg)))
+                           (syntax->list #'(make-default-arg-name ...))
+                           (syntax->list #'(req/opt-spec ...))))]
+      [(make-default-arg ...)
+       (datum->syntax #'vobj-name
+                      (alternate-lists (syntax->list #'(make-default-arg-kw ...))
+                                       (syntax->list #'(make-default-arg-form ...))))]
+      [make-default-extras-arg-kw
+       (datum->syntax #'vobj-name
+                      (string->keyword
+                       (symbol->string (syntax->datum #'extras-name))))])
      #`(begin
          (struct vobj-name (extras-name part-name ...) #:transparent)
          (define (stuffer-name parts)
@@ -175,11 +208,13 @@
                         (map xf (accessor o))
                         (xf (accessor o))))
                   ...
-                  ;;((or ->cline (λ (x) x)) (accessor o)) ...
                   (extras-accessor o)
                   (content-line "END" '() begin/end-tag-string))))
          (define (to-string-name o)
            (string-join (map vobj->string (to-clines-name o)) ""))
+         (define (make-default-name make-default-extras-arg-kw [extras-arg '()]
+                                    make-default-arg ...)
+           (vobj-name extras-arg make-default-arg-name ...))
          ;; END def-vobj
          ))])
 
@@ -386,5 +421,8 @@
                  (treeify-content-lines
                   (port->content-lines
                    (open-input-file arg))))])
-      (display (vobj->string item))
-      )))
+      (display (vobj->string item))))
+  #;(display (vobj->string (vevent/default #:timestamp (seconds->date (current-seconds))
+                                         #:start (seconds->date (current-seconds))
+                                         #:uid (content-line "UID" '() "aoeu"))))
+  )

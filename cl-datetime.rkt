@@ -52,8 +52,10 @@
                          extra-params)])
     (content-line cline-name all-params (date->ical-datetime-str d))))
 (define (p-date->datetime-content-line pd cline-name)
-  (date->datetime-content-line (eparams-value pd)
-                               cline-name
-                               #:extra-params (eparams-params pd)))
+  (if (eparams? pd)
+      (date->datetime-content-line (eparams-value pd)
+                                   cline-name
+                                   #:extra-params (eparams-params pd))
+      (date->datetime-content-line pd cline-name)))
 
 
