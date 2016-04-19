@@ -38,7 +38,7 @@
   (define date-no-time (r:date->seconds (string->date date-text "~Y-~m-~d")))
   (define time-lax (string->date time-text "~H:~M"))
   (define time-seconds (+ (* 60 (date-minute time-lax))
-                          (date-second time-lax)))
+                          (* 60 60 (date-hour time-lax))))
   (define datetime (seconds->date (+ date-no-time time-seconds)))
 
   (define event
