@@ -45,6 +45,8 @@
     (vevent/default
      #:uid (generate-uid)
      #:timestamp (seconds->date (current-seconds) #f)
+     #:created-time (seconds->date (current-seconds) #f)
+     #:last-modified-time (seconds->date (current-seconds) #f)
      #:start datetime
      #:summary summary-text
      #:description desc-text
