@@ -198,7 +198,12 @@
          (define (to-clines-name o)
            (flatten
             (list (content-line "BEGIN" '() begin/end-tag-string)
-                  (let* ([xf (or ->cline (λ (x) x))])
+                  (let* ([xf (cond [(not ->cline) (λ (x) x)]
+                                   [(equal? ->cline 'default)
+                                    ;; the default transformer is good for strings
+                                    ;; but will only work if the matcher is a string
+                                    (curry ->content-line matcher)]
+                                   [else ->cline])])
                     (if (equal? req/opt-spec 'list)
                         (map xf (accessor o))
                         (xf (accessor o))))
@@ -216,9 +221,9 @@
 (def-vobj vcalendar
   ;; field, matcher/pred, xf-in, xf-out, ropt-spec
   "VCALENDAR"
-  ([prod-id "PRODID" #f #f 'required]
-   [version "VERSION" #f #f 'required]
-   [method "METHOD" #f #f 'optional]
+  ([prod-id "PRODID" #f 'default 'required]
+   [version "VERSION" #f 'default 'required]
+   [method "METHOD" #f 'default 'optional]
    [events vevent? #f vevent->content-lines 'list]
    [todos vtodo? #f vtodo->content-lines 'list]
    [journals vjournal? #f vjournal->content-lines 'list])
@@ -233,7 +238,7 @@
               content-line->p-date
               (curry p-date->content-line "DTSTAMP")
               'required]
-   [uid "UID" #f (curry ->content-line "UID") 'required]
+   [uid "UID" #f 'default 'required]
 
    ;; required unless there is a METHOD property, only one
    [start "DTSTART" content-line->p-date (curry p-date->content-line "DTSTART") 'optional]
@@ -242,14 +247,14 @@
    ;; alternatively there can be a DURATION rather than DTEND, but only one of the two
    [end "DTEND" content-line->p-date (curry p-date->content-line "DTEND") 'optional]
 
-   [summary "SUMMARY" #f #f 'optional]
-   [description "DESCRIPTION" #f #f 'optional]
-   [location "LOCATION" #f #f 'optional]
+   [summary "SUMMARY" #f 'default 'optional]
+   [description "DESCRIPTION" #f 'default 'optional]
+   [location "LOCATION" #f 'default 'optional]
    [created-time "CREATED" content-line->p-date (curry p-date->content-line "CREATED") 'optional]
    [last-modified-time "LAST-MODIFIED" content-line->p-date (curry p-date->content-line "LAST-MODIFIED") 'optional]
-   [organizer "ORGANIZER" #f #f 'optional]
-   [sequence "SEQUENCE" #f #f 'optional]
-   [status "STATUS" #f #f 'optional]
+   [organizer "ORGANIZER" #f 'default 'optional]
+   [sequence "SEQUENCE" #f 'default 'optional]
+   [status "STATUS" #f 'default 'optional]
 
    ;; optional, only one, TODO
    ;class
@@ -263,7 +268,7 @@
    ;rrule
 
    ;; optional, multiple times
-   [attendees "ATTENDEE" #f #f 'list]
+   [attendees "ATTENDEE" #f 'default 'list]
    ;attachments
    ;categories
    ;comments
@@ -279,14 +284,14 @@
 (def-vobj valarm
   ;; field, matcher/pred, xf-in, xf-out, ropt-spec
   "VALARM"
-  ([trigger "TRIGGER" #f #f 'required]
-   [action "ACTION" #f #f 'required]
-   [description "DESCRIPTION" #f #f 'optional]
-   [summary "SUMMARY" #f #f 'optional]
-   [duration "DURATION" #f #f 'optional]
-   [repeat "REPEAT" #f #f 'optional]
-   [attach "ATTACH" #f #f 'optional]
-   [attendees "ATTENDEE" #f #f 'list]
+  ([trigger "TRIGGER" #f 'default 'required]
+   [action "ACTION" #f 'default 'required]
+   [description "DESCRIPTION" #f 'default 'optional]
+   [summary "SUMMARY" #f 'default 'optional]
+   [duration "DURATION" #f 'default 'optional]
+   [repeat "REPEAT" #f 'default 'optional]
+   [attach "ATTACH" #f 'default 'optional]
+   [attendees "ATTENDEE" #f 'default 'list]
    )
   extras)
 
@@ -323,22 +328,22 @@
   "VCARD"
   (
    ;; version must come immediately after the BEGIN line
-   [version "VERSION" #f #f 'required]
-   [prodid "PRODID" #f #f 'optional]
+   [version "VERSION" #f 'default 'required]
+   [prodid "PRODID" #f 'default 'optional]
    [revision "REV" content-line->p-date (curry p-date->content-line "REV") 'optional]
-   [uid "UID" #f #f 'optional]
-   [formatted-names "FN" #f #f 'list] ;; at least one is required...
-   [structured-name "N" #f #f 'optional]
+   [uid "UID" #f 'default 'optional]
+   [formatted-names "FN" #f 'default 'list] ;; at least one is required...
+   [structured-name "N" #f 'default 'optional]
    #|
    Structured name is famly-names;given-names;additional-names;honorific-prefixes;honorific-suffixes
    If you have multiple of one type of name, they are comma separated.
    |#
-   [nicknames "NICKNAME" #f #f 'list]
-   [photos "PHOTO" #f #f 'list]
-   [birthday "BDAY" #f #f 'optional]
-   [anniversary "ANNIVERSARY" #f #f 'optional]
-   [gender "GENDER" #f #f 'optional]
-   [addresses "ADR" #f #f 'list]
+   [nicknames "NICKNAME" #f 'default 'list]
+   [photos "PHOTO" #f 'default 'list]
+   [birthday "BDAY" #f 'default 'optional]
+   [anniversary "ANNIVERSARY" #f 'default 'optional]
+   [gender "GENDER" #f 'default 'optional]
+   [addresses "ADR" #f 'default 'list]
    #|
    address components are semicolon separated and have to be in the right order (with blanks)
    the post office box;
@@ -355,20 +360,20 @@
    Mail Drop: TNE QB\n123 Main Street\nAny Town, CA  91921-1234\n
    U.S.A.":;;123 Main Street;Any Town;CA;91921-1234;U.S.A.
    |#
-   [telephones "TEL" #f #f 'list]
-   [emails "EMAIL" #f #f 'list]
-   [messaging-addresses "IMPP" #f #f 'list]
-   [uris "URL" #f #f 'list]
-   [pubkeys "KEY" #f #f 'list]
-   [languages "LANG" #f #f 'list]
-   [free-busy-uris "FBURL" #f #f 'list] ;; URLs to free-busy calendar
-   [calendar-uris "CALURI" #f #f 'list] ;; URLs to calendar
-   [calendar-request-uris "CALADRURI" #f #f 'list] ;; URLs (email addrs) for requesting appointments
-   [time-zones "TZ" #f #f 'list]
-   [geocoordinates "GEO" #f #f 'list] ;;  eg. GEO:geo:37.00,-122.00
-   [titles "TITLE" #f #f 'list]
-   [roles "ROLE" #f #f 'list]
-   [relations "RELATED" #f #f 'list]
+   [telephones "TEL" #f 'default 'list]
+   [emails "EMAIL" #f 'default 'list]
+   [messaging-addresses "IMPP" #f 'default 'list]
+   [uris "URL" #f 'default 'list]
+   [pubkeys "KEY" #f 'default 'list]
+   [languages "LANG" #f 'default 'list]
+   [free-busy-uris "FBURL" #f 'default 'list] ;; URLs to free-busy calendar
+   [calendar-uris "CALURI" #f 'default 'list] ;; URLs to calendar
+   [calendar-request-uris "CALADRURI" #f 'default 'list] ;; URLs (email addrs) for requesting appointments
+   [time-zones "TZ" #f 'default 'list]
+   [geocoordinates "GEO" #f 'default 'list] ;;  eg. GEO:geo:37.00,-122.00
+   [titles "TITLE" #f 'default 'list]
+   [roles "ROLE" #f 'default 'list]
+   [relations "RELATED" #f 'default 'list]
    #|
    eg.
    RELATED;TYPE=friend:urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6
@@ -376,7 +381,7 @@
    RELATED;TYPE=co-worker;VALUE=text:Please contact my assistant Jane
    Doe for any inquiries.
    |#
-   [categories "CATEGORIES" #f #f 'list]
+   [categories "CATEGORIES" #f 'default 'list]
    #|
    tags for filtering, essentially.  This will be a list of lists in the end.
    eg.
@@ -422,5 +427,6 @@
       (display (vobj->string item))))
   #;(display (vobj->string (vevent/default #:timestamp (seconds->date (current-seconds))
                                          #:start (seconds->date (current-seconds))
-                                         #:uid (content-line "UID" '() "aoeu"))))
+                                         #:uid "this-is-my-uid"
+                         )))
   )
