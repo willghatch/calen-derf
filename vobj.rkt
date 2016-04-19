@@ -12,6 +12,13 @@
 (require (for-syntax racket/syntax))
 (require (for-syntax racket/base))
 
+(provide
+ port->vobjects
+ vobj->string
+ ;; also provided are vobjects and their /default constructors
+ (all-from-out "content-line.rkt")
+ )
+
 ;; note - property parameter values are case insensitive unless they are in quotes,
 ;;        and they should never contain quotes
 
@@ -184,6 +191,7 @@
                        (symbol->string (syntax->datum #'extras-name))))])
      #`(begin
          (struct vobj-name (extras-name part-name ...) #:transparent)
+         (provide (struct-out vobj-name))
          (define (stuffer-name parts)
            (let ([part-hash
                   (build-vobj-hash
@@ -212,6 +220,7 @@
                   (content-line "END" '() begin/end-tag-string))))
          (define (to-string-name o)
            (string-join (map vobj->string (to-clines-name o)) ""))
+         (provide make-default-name)
          (define (make-default-name make-default-extras-arg-kw [extras-arg '()]
                                     make-default-arg ...)
            (vobj-name extras-arg make-default-arg-name ...))
@@ -393,6 +402,7 @@
   extras)
 
 
+(provide (struct-out vunknown))
 (struct vunknown
   (extras tag)
   #:transparent)
@@ -417,6 +427,10 @@
             [else (stuff-vunknown tag xformed-innards)]))
         o)))
 
+(define (port->vobjects in-port)
+  (treeified-cont-lines->vcal-objects
+   (treeify-content-lines
+    (port->content-lines in-port))))
 
 (module+ main
   (for ([arg (current-command-line-arguments)])
