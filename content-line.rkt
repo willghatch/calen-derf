@@ -8,6 +8,7 @@
  content-line->string
  content-line-get-param-values
  content-line-filter-out-params
+ ->content-line
  $param-list
  )
 
@@ -33,6 +34,20 @@
   ;; that I've ignored.  So this will store them.
   (params value)
   #:transparent)
+
+(define (->content-line tag value
+              ;; transformer should be (x -> (values '(param ...) value-string))
+              ;; the default transformer is good for basic string values
+              #:transformer [transform (λ (str) (values '() str))])
+  ;; This is a generic transformer to get to content lines
+  (cond
+    [(not value) #f]
+    [(content-line? value) value]
+    [(eparams? value)
+     (let-values ([(params str-val) (transform (eparams-value value))])
+       (content-line tag (append params (eparams-params value)) str-val))]
+    [else (let-values ([(params str-val) (transform value)])
+            (content-line tag params str-val))]))
 
 (define escape-linebreak-chars " \t")
 (define control-chars ;; all controls except TAB

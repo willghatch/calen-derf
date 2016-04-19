@@ -1,7 +1,7 @@
 #lang racket/base
 
-(provide datetime-content-line->p-date
-         p-date->datetime-content-line
+(provide content-line->p-date
+         p-date->content-line
          ical-datetime-str->date
          date->ical-datetime-str
          )
@@ -30,32 +30,27 @@
          [datestr (date->string d time-format-str)])
     (format "~a~a" datestr z-str)))
 
-(define (datetime-content-line->date cl)
-  (let* ([str (content-line-value cl)]
-         [tz-params (content-line-get-param-values cl "TZID")]
-         [tz-name (or (and (not (null? tz-params))
-                           (car tz-params))
-                      "")])
-    (ical-datetime-str->date str #:tz-name tz-name)))
-(define (datetime-content-line->p-date cl)
+(define (content-line->date cl)
+  (if (not cl)
+      #f
+      (let* ([str (content-line-value cl)]
+             [tz-params (content-line-get-param-values cl "TZID")]
+             [tz-name (or (and (not (null? tz-params))
+                               (car tz-params))
+                          "")])
+        (ical-datetime-str->date str #:tz-name tz-name))))
+(define (content-line->p-date cl)
   (eparams (content-line-filter-out-params cl "TZID")
-           (datetime-content-line->date cl)))
+           (content-line->date cl)))
 
-(define (date->datetime-content-line d cline-name #:extra-params [extra-params '()])
+(define (date->cl-transformer d)
   (let* ([tz-name (date*-time-zone-name d)]
          [utc? (equal? tz-name "UTC")]
-         [tz-param (cond [utc? #f]
-                         [(equal? tz-name "") #f]
-                         [else (param "TZID" (list tz-name))])]
-         [all-params (if tz-param
-                         (cons tz-param extra-params)
-                         extra-params)])
-    (content-line cline-name all-params (date->ical-datetime-str d))))
-(define (p-date->datetime-content-line pd cline-name)
-  (if (eparams? pd)
-      (date->datetime-content-line (eparams-value pd)
-                                   cline-name
-                                   #:extra-params (eparams-params pd))
-      (date->datetime-content-line pd cline-name)))
+         [tz-params (cond [utc? '()]
+                          [(equal? tz-name "") '()]
+                          [else (list (param "TZID" (list tz-name)))])])
+    (values tz-params (date->ical-datetime-str d))))
 
+(define (p-date->content-line tag pd)
+  (->content-line tag pd #:transformer date->cl-transformer))
 

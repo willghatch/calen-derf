@@ -5,6 +5,7 @@
 (require racket/list)
 (require racket/string)
 (require racket/match)
+(require racket/function)
 (require kw-make-struct)
 (require syntax/parse/define)
 (require (for-syntax syntax/parse))
@@ -23,12 +24,6 @@
   (if (pair? l)
       (car l)
       #f))
-(define (p-date->cl d name)
-  (if d (p-date->datetime-content-line d name) #f))
-(define (p-date->cl/curry name)
-  (λ (d) (p-date->cl d name)))
-(define (cl->p-date cl)
-  (if cl (datetime-content-line->p-date cl) #f))
 
 (define (filter-pred/left pred l)
   (let ([passes (filter pred l)])
@@ -234,21 +229,24 @@
   "VEVENT"
   (
    ;; required, only one
-   [timestamp "DTSTAMP" cl->p-date (p-date->cl/curry "DTSTAMP") 'required]
-   [uid "UID" #f #f 'required]
+   [timestamp "DTSTAMP"
+              content-line->p-date
+              (curry p-date->content-line "DTSTAMP")
+              'required]
+   [uid "UID" #f (curry ->content-line "UID") 'required]
 
    ;; required unless there is a METHOD property, only one
-   [start "DTSTART" cl->p-date (p-date->cl/curry "DTSTART") 'optional]
+   [start "DTSTART" content-line->p-date (curry p-date->content-line "DTSTART") 'optional]
 
    ;; optional, only one
    ;; alternatively there can be a DURATION rather than DTEND, but only one of the two
-   [end "DTEND" cl->p-date (p-date->cl/curry "DTEND") 'optional]
+   [end "DTEND" content-line->p-date (curry p-date->content-line "DTEND") 'optional]
 
    [summary "SUMMARY" #f #f 'optional]
    [description "DESCRIPTION" #f #f 'optional]
    [location "LOCATION" #f #f 'optional]
-   [created-time "CREATED" cl->p-date (p-date->cl/curry "CREATED") 'optional]
-   [last-modified-time "LAST-MODIFIED" cl->p-date (p-date->cl/curry "LAST-MODIFIED") 'optional]
+   [created-time "CREATED" content-line->p-date (curry p-date->content-line "CREATED") 'optional]
+   [last-modified-time "LAST-MODIFIED" content-line->p-date (curry p-date->content-line "LAST-MODIFIED") 'optional]
    [organizer "ORGANIZER" #f #f 'optional]
    [sequence "SEQUENCE" #f #f 'optional]
    [status "STATUS" #f #f 'optional]
@@ -327,7 +325,7 @@
    ;; version must come immediately after the BEGIN line
    [version "VERSION" #f #f 'required]
    [prodid "PRODID" #f #f 'optional]
-   [revision "REV" cl->p-date (p-date->cl/curry "REV") 'optional]
+   [revision "REV" content-line->p-date (curry p-date->content-line "REV") 'optional]
    [uid "UID" #f #f 'optional]
    [formatted-names "FN" #f #f 'list] ;; at least one is required...
    [structured-name "N" #f #f 'optional]
