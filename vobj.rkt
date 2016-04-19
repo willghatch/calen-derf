@@ -31,6 +31,7 @@
   (if (pair? l)
       (car l)
       #f))
+(define cl->eps content-line->eparams-string)
 
 (define (filter-pred/left pred l)
   (let ([passes (filter pred l)])
@@ -230,9 +231,9 @@
 (def-vobj vcalendar
   ;; field, matcher/pred, xf-in, xf-out, ropt-spec
   "VCALENDAR"
-  ([prod-id "PRODID" #f 'default 'required]
-   [version "VERSION" #f 'default 'required]
-   [method "METHOD" #f 'default 'optional]
+  ([prod-id "PRODID" cl->eps 'default 'required]
+   [version "VERSION" cl->eps 'default 'required]
+   [method "METHOD" cl->eps 'default 'optional]
    [events vevent? #f vevent->content-lines 'list]
    [todos vtodo? #f vtodo->content-lines 'list]
    [journals vjournal? #f vjournal->content-lines 'list])
@@ -247,7 +248,7 @@
               content-line->p-date
               (curry p-date->content-line "DTSTAMP")
               'required]
-   [uid "UID" #f 'default 'required]
+   [uid "UID" cl->eps 'default 'required]
 
    ;; required unless there is a METHOD property, only one
    [start "DTSTART" content-line->p-date (curry p-date->content-line "DTSTART") 'optional]

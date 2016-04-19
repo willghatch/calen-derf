@@ -4,6 +4,7 @@
  (struct-out content-line)
  (struct-out param)
  (struct-out eparams)
+ (ep-val)
  port->content-lines
  content-line->string
  content-line-get-param-values
@@ -34,6 +35,10 @@
   ;; that I've ignored.  So this will store them.
   (params value)
   #:transparent)
+(define (ep-val v)
+  (if (eparams? v)
+      (eparams-value v)
+      v))
 
 (define (->content-line tag value
               ;; transformer should be (x -> (values '(param ...) value-string))
@@ -48,6 +53,12 @@
        (content-line tag (append params (eparams-params value)) str-val))]
     [else (let-values ([(params str-val) (transform value)])
             (content-line tag params str-val))]))
+
+(define (content-line->eparam-string cl)
+  (if (not (content-line? cl))
+      #f
+      (eparams (content-line-params cl)
+               (content-line-value cl))))
 
 (define escape-linebreak-chars " \t")
 (define control-chars ;; all controls except TAB
