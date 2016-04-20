@@ -39,7 +39,7 @@
   (define time-lax (string->date time-text "~H:~M"))
   (define time-seconds (+ (* 60 (date-minute time-lax))
                           (* 60 60 (date-hour time-lax))))
-  (define datetime (seconds->date (+ date-no-time time-seconds)))
+  (define datetime (seconds->date (+ date-no-time time-seconds) #f))
 
   (define event
     (vevent/default
