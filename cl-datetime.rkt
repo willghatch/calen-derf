@@ -40,7 +40,7 @@
                           "")])
         (ical-datetime-str->date str #:tz-name tz-name))))
 (define (content-line->p-date cl)
-  (eparams (content-line-filter-out-params cl "TZID")
+  (eparams (content-line-filter-out-params cl '("TZID"))
            (content-line->date cl)))
 
 (define (date->cl-transformer d)

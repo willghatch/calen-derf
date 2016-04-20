@@ -3,6 +3,7 @@
 (provide
  (struct-out content-line)
  (struct-out param)
+ mkparam
  (struct-out eparams)
  ep-val
  port->content-lines
@@ -12,6 +13,9 @@
  content-line-filter-out-params
  ->content-line
  $param-list
+
+ duration-string->seconds
+ seconds->duration-string
  )
 
 (require (rename-in parsack
@@ -28,6 +32,8 @@
   ;; string, list of strings
   (name values)
   #:transparent)
+(define (mkparam name . vals)
+  (param name vals))
 
 (struct eparams
   ;; eparams is a wrapper for transformed content lines.
@@ -214,8 +220,53 @@
                                params)])
     (flatten (map param-values right-params))))
 
-(define (content-line-filter-out-params cline exclude-param-id)
+(define (content-line-filter-out-params cline exclude-param-ids)
   (let* ([params (content-line-params cline)])
-    (filter (λ (p) (not (equal? (param-name p) exclude-param-id)))
+    (filter (λ (p) (not (member (param-name p) exclude-param-ids)))
             params)))
 
+(define $dur-sign
+  (<or> (parser-compose (char #\-) (char #\P) (char #\T) (return -1))
+        (parser-compose (char #\P) (char #\T) (return 1))))
+
+(define $duration-part
+  (parser-compose
+   (ns <- (many $digit))
+   (hms <- (<or> (char #\H) (char #\M) (char #\S)))
+   (return (let ([mult (cond [(equal? hms #\H) (* 60 60)]
+                             [(equal? hms #\M) 60]
+                             [else 1])])
+             (* mult (or (string->number (apply string ns)) 0))))))
+
+(define $duration-str
+  (parser-compose
+   (sign <- $dur-sign)
+   (durs <- (many $duration-part))
+   (return (* sign (apply + durs)))))
+
+(define (duration-string->seconds ds)
+  (with-handlers ([(λ _ #t) (λ _ 0)])
+    (parse-result $duration-str ds)))
+(define (seconds->duration-string s)
+  (let* ([as (abs s)]
+         [sign (negative? s)]
+         [hours (quotient as (* 60 60))]
+         [minutes (quotient (remainder as (* 60 60)) 60)]
+         [seconds (remainder as 60)])
+    (string-append (if sign "-" "")
+                   "PT"
+                   (if (> hours 0) (format "~aH" hours) "")
+                   (if (> minutes 0) (format "~aM" minutes) "")
+                   (if (> seconds 0) (format "~aS" seconds) ""))))
+
+(module+ test
+  (require rackunit)
+  (check-equal? (duration-string->seconds "PT1H2M3S")
+                (+ (* 60 60 1) (* 2 60) 3))
+  (check-equal? (duration-string->seconds "-PT1H2M3S")
+                (- (+ (* 60 60 1) (* 2 60) 3)))
+  (check-equal? (seconds->duration-string (- (+ (* 60 60 1) (* 2 60) 3)))
+                "-PT1H2M3S")
+  (check-equal? (seconds->duration-string (+ (* 60 60 1) (* 2 60) 3))
+                "PT1H2M3S")
+  )

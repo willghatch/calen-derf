@@ -12,12 +12,17 @@
 (require (for-syntax racket/syntax))
 (require (for-syntax racket/base))
 
+(module+ test
+  (require rackunit)
+  )
+
 (provide
  port->vobjects
  vobj->string
  generate-uid
  calen-derf-prod-id
  vcalendar-version-string
+ (struct-out valarm-trigger-struct)
  ;; also provided are vobjects and their /default constructors
  (all-from-out "content-line.rkt")
  )
@@ -311,10 +316,48 @@
    [alarms valarm? #f valarm->content-lines 'list])
   extras)
 
+(struct valarm-trigger-struct
+  (absolute-time related-time related-to)
+  #:transparent)
+(define (cl->valarm-trigger cl)
+  (let* ([related-param (content-line-get-param-values cl "RELATED")]
+         [value-param (content-line-get-param-values cl "VALUE")]
+         [other-params (content-line-filter-out-params cl '("RELATED" "VALUE"))]
+         [relation-text (and (not (empty? related-param)) (first related-param))]
+         [val-par-text (and (not (empty? value-param)) (first value-param))]
+         [abs-time (and (equal? val-par-text "DATE-TIME")
+                        (ical-datetime-str->date (content-line-value cl)))]
+         [rel-flag (if (equal? relation-text "END") 'end 'begin)]
+         [rel-amount (and (not abs-time)
+                          (duration-string->seconds (content-line-value cl)))])
+    (eparams other-params (valarm-trigger-struct abs-time rel-amount rel-flag))))
+(define (valarm-trigger->cl-xform trig)
+  (let* ([abs-time (valarm-trigger-struct-absolute-time trig)]
+         [rel-time (and (not abs-time) (valarm-trigger-struct-related-time trig))]
+         [value (if abs-time
+                    (date->ical-datetime-str abs-time)
+                    (seconds->duration-string rel-time))]
+         [params (cond [abs-time (list (mkparam "VALUE" "DATE-TIME"))]
+                       [(equal? (valarm-trigger-struct-related-to trig) 'end)
+                        (list (mkparam "RELATED" "END"))]
+                       [else '()])])
+    (values params value)))
+(define (valarm-trigger->cl trig)
+  (->content-line "TRIGGER" trig #:transformer valarm-trigger->cl-xform))
+
+(module+ test
+  (define test-cl (content-line "TRIGGER" (list (mkparam "RELATED" "END")) "-PT15M"))
+  (define test-trig (valarm-trigger-struct #f (* -1 15 60) 'end))
+  (check-equal? (valarm-trigger->cl test-trig)
+                test-cl)
+  (check-equal? (cl->valarm-trigger test-cl)
+                (eparams '() test-trig))
+  )
+
 (def-vobj valarm
   ;; field, matcher/pred, xf-in, xf-out, ropt-spec
   "VALARM"
-  ([trigger "TRIGGER" #f 'default 'required]
+  ([trigger "TRIGGER" cl->valarm-trigger valarm-trigger->cl 'required]
    [action "ACTION" #f 'default 'required]
    [description "DESCRIPTION" #f 'default 'optional]
    [summary "SUMMARY" #f 'default 'optional]
