@@ -24,6 +24,10 @@
 (require racket/string)
 (require racket/list)
 
+(module+ test
+  (require rackunit)
+  )
+
 (struct content-line
   ;; string, list of params, string
   (name params value)
@@ -260,7 +264,6 @@
                    (if (> seconds 0) (format "~aS" seconds) ""))))
 
 (module+ test
-  (require rackunit)
   (check-equal? (duration-string->seconds "PT1H2M3S")
                 (+ (* 60 60 1) (* 2 60) 3))
   (check-equal? (duration-string->seconds "-PT1H2M3S")
