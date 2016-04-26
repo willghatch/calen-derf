@@ -57,6 +57,10 @@
       (car l)
       #f))
 (define cl->eps content-line->eparams-string)
+(define (cl->eps/t string->)
+  (λ (cl) (cl->eps cl #:string-> string->)))
+(define (->cl/t tag transform)
+  (λ (x) (->content-line tag x #:transformer transform)))
 
 (define (filter-pred/left pred l)
   (let ([passes (filter pred l)])
@@ -187,6 +191,10 @@
         (map (λ (n) (format-id #'vobj-name "~a-~a" #'vobj-name n))
              (syntax->list #'(part-name ...))))]
       [extras-accessor (format-id #'vobj-name "~a-~a" #'vobj-name #'extras-name)]
+      [(accessor/ne ...)
+       (datum->syntax #'vobj-name
+                      (map (λ (n) (format-id #'vobj-name "~a/ne" n))
+                           (syntax->list #'(accessor ...))))]
       [make-default-name (format-id #'vobj-name "~a/default" #'vobj-name)]
       [(make-default-arg-kw ...)
        (datum->syntax #'vobj-name
@@ -250,6 +258,10 @@
          (define (make-default-name make-default-extras-arg-kw [extras-arg '()]
                                     make-default-arg ...)
            (vobj-name extras-arg make-default-arg-name ...))
+         (define (accessor/ne o)
+           ;; access parts of a vobject while unwrapping from eparams structs
+           (ep-val (accessor o)))
+         ...
          ;; END def-vobj
          ))])
 
@@ -361,7 +373,10 @@
    [action "ACTION" #f 'default 'required]
    [description "DESCRIPTION" #f 'default 'optional]
    [summary "SUMMARY" #f 'default 'optional]
-   [duration "DURATION" #f 'default 'optional]
+   [duration "DURATION"
+             (cl->eps/t duration-string->seconds)
+             (->cl/t "DURATION" seconds->duration-string)
+             'optional]
    [repeat "REPEAT" #f 'default 'optional]
    [attach "ATTACH" #f 'default 'optional]
    [attendees "ATTENDEE" #f 'default 'list]
@@ -371,7 +386,17 @@
 (def-vobj vtodo
   ;; field, matcher/pred, xf-in, xf-out, ropt-spec
   "VTODO"
-  ()
+  ([uid "UID" cl->eps 'default 'required]
+   [timestamp "DTSTAMP"
+              content-line->p-date
+              (curry p-date->content-line "DTSTAMP")
+              'required]
+   [due "DUE" content-line->p-date (curry p-date->content-line "DUE") 'optional]
+   [duration "DURATION"
+             (cl->eps/t duration-string->seconds)
+             (->cl/t "DURATION" seconds->duration-string)
+             'optional]
+   )
   extras)
 
 (def-vobj vjournal

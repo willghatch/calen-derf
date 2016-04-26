@@ -65,11 +65,11 @@
     [else (let-values ([(params str-val) (transform value)])
             (content-line tag params str-val))]))
 
-(define (content-line->eparams-string cl)
+(define (content-line->eparams-string cl #:string-> [string-> (λ (x) x)])
   (if (not (content-line? cl))
       #f
       (eparams (content-line-params cl)
-               (content-line-value cl))))
+               (content-line-value (string-> cl)))))
 
 (define escape-linebreak-chars " \t")
 (define control-chars ;; all controls except TAB
