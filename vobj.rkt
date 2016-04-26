@@ -262,6 +262,7 @@
            ;; access parts of a vobject while unwrapping from eparams structs
            (ep-val (accessor o)))
          ...
+         (provide accessor/ne) ...
          ;; END def-vobj
          ))])
 
@@ -293,6 +294,10 @@
    ;; optional, only one
    ;; alternatively there can be a DURATION rather than DTEND, but only one of the two
    [end "DTEND" content-line->p-date (curry p-date->content-line "DTEND") 'optional]
+   [duration "DURATION"
+             (cl->eps/t duration-string->seconds)
+             (->cl/t "DURATION" seconds->duration-string)
+             'optional]
 
    [summary "SUMMARY" #f 'default 'optional]
    [description "DESCRIPTION" #f 'default 'optional]
@@ -370,9 +375,9 @@
   ;; field, matcher/pred, xf-in, xf-out, ropt-spec
   "VALARM"
   ([trigger "TRIGGER" cl->valarm-trigger valarm-trigger->cl 'required]
-   [action "ACTION" #f 'default 'required]
-   [description "DESCRIPTION" #f 'default 'optional]
-   [summary "SUMMARY" #f 'default 'optional]
+   [action "ACTION" #f 'default 'required] ;; DISPLAY, EMAIL, or AUDIO
+   [description "DESCRIPTION" cl->eps 'default 'optional]
+   [summary "SUMMARY" cl->eps 'default 'optional]
    [duration "DURATION"
              (cl->eps/t duration-string->seconds)
              (->cl/t "DURATION" seconds->duration-string)
@@ -391,11 +396,13 @@
               content-line->p-date
               (curry p-date->content-line "DTSTAMP")
               'required]
+   [start "DTSTART" content-line->p-date (curry p-date->content-line "DTSTART") 'optional]
    [due "DUE" content-line->p-date (curry p-date->content-line "DUE") 'optional]
    [duration "DURATION"
              (cl->eps/t duration-string->seconds)
              (->cl/t "DURATION" seconds->duration-string)
              'optional]
+   [alarms valarm? #f valarm->content-lines 'list]
    )
   extras)
 

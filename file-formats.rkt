@@ -16,10 +16,12 @@
 
 
 (struct vdir
-  (elems path ics/vcf))
+  (elems path ics/vcf)
+  #:transparent)
 
 (struct vdir-elem
-  (vobjects path modified-time))
+  (vobjects path modified-time)
+  #:transparent)
 
 (define (write-vdir-elem! e)
   (display-to-file (string-join (map vobj->string (vdir-elem-vobjects e)) "")

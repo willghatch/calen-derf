@@ -4,10 +4,12 @@
          p-date->content-line
          ical-datetime-str->date
          date->ical-datetime-str
+         date->seconds/local?
          )
 
 (require srfi/19)
 (require racket/string)
+(require (only-in racket/date date->seconds))
 (require "content-line.rkt")
 
 (define time-format-str "~Y~m~dT~H~M~S")
@@ -53,4 +55,8 @@
 
 (define (p-date->content-line tag pd)
   (->content-line tag pd #:transformer date->cl-transformer))
+
+(define (date->seconds/local? d)
+  (let ([local? (and d (equal? "LOCAL" (date*-time-zone-name d)))])
+    (and d (date->seconds d local?))))
 
